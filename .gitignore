@@ -22,6 +22,7 @@ var/
 *.egg-info/
 .installed.cfg
 *.egg
+MANIFEST
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
@@ -55,3 +56,14 @@ docs/_build/
 
 # PyBuilder
 target/
+
+# Eclipse
+.project
+.pydevproject
+
+# PyCharm
+.idea
+
+# OS files
+.DS_Store
+*.swp
