@@ -39,5 +39,5 @@ Links
 License
 -------
 
-For more information see the `LICENSE <https://github.com/erigones/Ludolph/blob/master/LICENSE>`_ file.
+For more information see the `LICENSE <https://github.com/erigones/ludolph-plugin-skeleton/blob/master/LICENSE>`_ file.
 
