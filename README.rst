@@ -1,5 +1,5 @@
-ludolph-plugin-skeleton
-#######################
+ludolph-skeleton
+################
 
 Sample hello world plugin for `Ludolph <https://github.com/erigones/Ludolph>`_
 
@@ -16,7 +16,7 @@ Installation
 
 - Update Ludolph configuration file with plugin to load::
 
-    [ludolph-hello-world.base]
+    [hello_world.base]
 
 - Reload Ludolph::
 
@@ -32,12 +32,12 @@ Links
 -----
 
 - Wiki: https://github.com/erigones/Ludolph/wiki/How-to-create-plugin#create-3rd-party-plugin
-- Bug Tracker: https://github.com/erigones/ludolph-plugin-skeleton/issues
+- Bug Tracker: https://github.com/erigones/ludolph-skeleton/issues
 - Twitter: https://twitter.com/erigones
 
 
 License
 -------
 
-For more information see the `LICENSE <https://github.com/erigones/ludolph-plugin-skeleton/blob/master/LICENSE>`_ file.
+For more information see the `LICENSE <https://github.com/erigones/ludolph-skeleton/blob/master/LICENSE>`_ file.
 

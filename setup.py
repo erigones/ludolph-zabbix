@@ -46,7 +46,7 @@ CLASSIFIERS = [
 ]
 
 packages = [
-    'ludolph-hello-world',
+    'hello_world',
 ]
 
 setup(
@@ -56,11 +56,11 @@ setup(
     long_description=LONG_DESCRIPTION,
     author='Erigones',
     author_email='erigones [at] erigones.com',
-    url='https://github.com/erigones/ludolph-plugin-skeleton/',
+    url='https://github.com/erigones/ludolph-skeleton/',
     license='MIT',
     packages=packages,
     install_requires=DEPS,
-    platforms='Linux',
+    platforms='any',
     classifiers=CLASSIFIERS,
     include_package_data=True
 )

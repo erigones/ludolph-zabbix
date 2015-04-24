@@ -1,7 +1,7 @@
 """
 Ludolph: Hello world plugin
 Copyright (C) 2015 Erigones, s. r. o.
-This file is part of ludolph-plugin-skeleton.
+This file is part of ludolph-skeleton.
 
 See the file LICENSE for copying permission.
 """
