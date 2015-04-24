@@ -1,7 +1,5 @@
 """
-Ludolph: Hello World plugin
-Version: 1.1a
-Homepage: https://github.com/erigones/ludolph-skeleton
+This file is part of Ludolph: hello world plugin
 Copyright (C) 2015 Erigones, s. r. o.
 
 See the LICENSE file for copying permission.

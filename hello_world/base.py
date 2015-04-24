@@ -1,9 +1,8 @@
 """
-Ludolph: Hello world plugin
+This file is part of Ludolph: hello world plugin
 Copyright (C) 2015 Erigones, s. r. o.
-This file is part of ludolph-skeleton.
 
-See the file LICENSE for copying permission.
+See the LICENSE file for copying permission.
 """
 # noinspection PyPep8Naming
 from hello_world.__init__ import __version__ as VERSION

@@ -1,11 +1,10 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
+# This file is part of Ludolph: hello world plugin
 # Copyright (C) 2015 Erigones, s. r. o.
-# All Rights Reserved
 #
-# This software is licensed as described in the README.rst and LICENSE
-# files, which you should have received as part of this distribution.
+# See the LICENSE file for copying permission.
 
 import sys
 import codecs
