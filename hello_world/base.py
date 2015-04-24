@@ -6,7 +6,7 @@ This file is part of ludolph-skeleton.
 See the file LICENSE for copying permission.
 """
 # noinspection PyPep8Naming
-from __init__ import __version__ as VERSION
+from hello_world.__init__ import __version__ as VERSION
 from ludolph.command import command, parameter_required, admin_required
 from ludolph.plugins.plugin import LudolphPlugin
 
