@@ -31,8 +31,9 @@ Installation
 Links
 -----
 
-- Wiki: https://github.com/erigones/Ludolph/wiki/How-to-create-plugin#create-3rd-party-plugin
+- Wiki: https://github.com/erigones/Ludolph/wiki/How-to-create-a-plugin#create-3rd-party-plugin
 - Bug Tracker: https://github.com/erigones/ludolph-skeleton/issues
+- Google+ Community: https://plus.google.com/u/0/communities/112192048027134229675
 - Twitter: https://twitter.com/erigones
 
 
