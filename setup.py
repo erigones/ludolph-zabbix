@@ -15,8 +15,7 @@ except ImportError:
     from distutils.core import setup
 
 # noinspection PyPep8Naming
-#from ludolph-hello-world.__init__ import __version__ as VERSION
-VERSION = '1.0'
+from hello_world.__init__ import __version__ as VERSION
 
 DESCRIPTION = 'Hello world plugin'
 
