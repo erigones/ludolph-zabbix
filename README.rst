@@ -1,10 +1,10 @@
-ludolph-skeleton
-################
+ludolph-zabbix
+##############
 
-Sample hello world plugin for `Ludolph <https://github.com/erigones/Ludolph>`_
+Zabbix API plugin for `Ludolph <https://github.com/erigones/Ludolph>`_
 
-.. image:: https://badge.fury.io/py/ludolph-hello-world.png
-    :target: http://badge.fury.io/py/ludolph-hello-world
+.. image:: https://badge.fury.io/py/ludolph-zabbix.png
+    :target: http://badge.fury.io/py/ludolph-zabbix
 
 
 Installation
@@ -12,11 +12,21 @@ Installation
 
 - Install the latest released version using pip::
 
-    pip install ludolph-hello-world
+    pip install ludolph-zabbix
 
 - Update Ludolph configuration file with plugin to load::
 
-    [hello_world.base]
+    [zapi.zabbix]
+    # Zabbix server URI
+    server = https://zabbix.example.com/zabbix
+
+    # Zabbix credentials
+    username = ludolph
+    password =
+
+    # HTTP authetication
+    #httpuser =
+    #httppasswd =
 
 - Reload Ludolph::
 
@@ -26,13 +36,14 @@ Installation
 **Dependencies:**
 
 - `Ludolph <https://github.com/erigones/Ludolph>`_ (0.5.1+)
+- `zabbix-api-erigones <https://github.com/erigones/zabbix-api/>`_ (1.0+)
 
 
 Links
 -----
 
-- Wiki: https://github.com/erigones/Ludolph/wiki/How-to-create-a-plugin#create-3rd-party-plugin
-- Bug Tracker: https://github.com/erigones/ludolph-skeleton/issues
+- Wiki: https://github.com/erigones/Ludolph/wiki/How-to-configure-Zabbix-to-work-with-Ludolph
+- Bug Tracker: https://github.com/erigones/ludolph-zabbix/issues
 - Google+ Community: https://plus.google.com/u/0/communities/112192048027134229675
 - Twitter: https://twitter.com/erigones
 
@@ -40,5 +51,8 @@ Links
 License
 -------
 
-For more information see the `LICENSE <https://github.com/erigones/ludolph-skeleton/blob/master/LICENSE>`_ file.
+For more information see the `LICENSE <https://github.com/erigones/ludolph-zabbix/blob/master/LICENSE>`_ file.
 
+####
+
+The Ludolph Zabbix plugin is inspired by `Dante <http://www.digmia.com>`_.

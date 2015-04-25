@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# This file is part of Ludolph: hello world plugin
+# This file is part of Ludolph: Zabbix API plugin
 # Copyright (C) 2015 Erigones, s. r. o.
 #
 # See the LICENSE file for copying permission.
@@ -14,7 +14,7 @@ except ImportError:
     from distutils.core import setup
 
 # noinspection PyPep8Naming
-from hello_world.__init__ import __version__ as VERSION
+from zapi.__init__ import __version__ as VERSION
 
 DESCRIPTION = 'Hello world plugin'
 
@@ -22,9 +22,9 @@ with codecs.open('README.rst', 'r', encoding='UTF-8') as readme:
     LONG_DESCRIPTION = ''.join(readme)
 
 if sys.version_info[0] < 3:
-    DEPS = ['ludolph', 'dnspython']
+    DEPS = ['ludolph', 'dnspython', 'zabbix-api-erigones']
 else:
-    DEPS = ['ludolph', 'dnspython3']
+    DEPS = ['ludolph', 'dnspython3', 'zabbix-api-erigones']
 
 CLASSIFIERS = [
     'Environment :: Console',
@@ -44,17 +44,17 @@ CLASSIFIERS = [
 ]
 
 packages = [
-    'hello_world',
+    'zapi',
 ]
 
 setup(
-    name='ludolph-hello-world',
+    name='ludolph-zabbix',
     version=VERSION,
     description=DESCRIPTION,
     long_description=LONG_DESCRIPTION,
     author='Erigones',
     author_email='erigones [at] erigones.com',
-    url='https://github.com/erigones/ludolph-skeleton/',
+    url='https://github.com/erigones/ludolph-zabbix/',
     license='MIT',
     packages=packages,
     install_requires=DEPS,
