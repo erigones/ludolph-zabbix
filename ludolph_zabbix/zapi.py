@@ -7,7 +7,7 @@ See the LICENSE file for copying permission.
 import logging
 from datetime import datetime, timedelta
 
-from zapi.__init__ import __version__ as VERSION
+from ludolph_zabbix.__init__ import __version__ as VERSION
 from ludolph.utils import parse_loglevel
 from ludolph.web import webhook, request, abort
 from ludolph.cron import cronjob
@@ -46,7 +46,7 @@ def zabbix_command(fun):
     return wrap
 
 
-class Zabbix(LudolphPlugin):
+class Zapi(LudolphPlugin):
     """
     Zabbix API connector for LudolphBot.
 

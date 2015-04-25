@@ -16,7 +16,7 @@ Installation
 
 - Update Ludolph configuration file with plugin to load::
 
-    [zapi.zabbix]
+    [ludolph_zabbix.zapi]
     # Zabbix server URI
     server = https://zabbix.example.com/zabbix
 

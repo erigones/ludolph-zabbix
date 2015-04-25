@@ -14,17 +14,19 @@ except ImportError:
     from distutils.core import setup
 
 # noinspection PyPep8Naming
-from zapi.__init__ import __version__ as VERSION
+from ludolph_zabbix.__init__ import __version__ as VERSION
 
-DESCRIPTION = 'Hello world plugin'
+DESCRIPTION = 'Ludolph: Zabbix API plugin'
 
 with codecs.open('README.rst', 'r', encoding='UTF-8') as readme:
     LONG_DESCRIPTION = ''.join(readme)
 
+DEPS = ['ludolph', 'zabbix-api-erigones']
+
 if sys.version_info[0] < 3:
-    DEPS = ['ludolph', 'dnspython', 'zabbix-api-erigones']
+    DEPS.append('dnspython')
 else:
-    DEPS = ['ludolph', 'dnspython3', 'zabbix-api-erigones']
+    DEPS.append('dnspython3')
 
 CLASSIFIERS = [
     'Environment :: Console',
@@ -44,7 +46,7 @@ CLASSIFIERS = [
 ]
 
 packages = [
-    'zapi',
+    'ludolph_zabbix',
 ]
 
 setup(
