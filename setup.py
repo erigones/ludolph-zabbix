@@ -23,11 +23,6 @@ with codecs.open('README.rst', 'r', encoding='UTF-8') as readme:
 
 DEPS = ['ludolph', 'zabbix-api-erigones']
 
-if sys.version_info[0] < 3:
-    DEPS.append('dnspython')
-else:
-    DEPS.append('dnspython3')
-
 CLASSIFIERS = [
     'Environment :: Console',
     'Environment :: Plugins',
