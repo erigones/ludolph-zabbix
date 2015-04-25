@@ -597,3 +597,12 @@ class Zabbix(LudolphPlugin):
         out.append('\n**%d** hostgroups are shown.\n%s/hostgroups.php' % (len(groups), self.zapi.server))
 
         return '\n'.join(out)
+
+    @command
+    def zapi_version(self, msg):
+        """
+        Show Ludolph: Zabbix API plugin version.
+
+        Usage: zapi_version
+        """
+        return 'ludolph-es version: '+ VERSION
