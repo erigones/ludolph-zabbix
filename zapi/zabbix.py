@@ -115,6 +115,16 @@ class Zabbix(LudolphPlugin):
         """
         return 'Zabbix API version: ' + self.zapi.api_version()
 
+    # noinspection PyUnusedLocal
+    @command
+    def ludolph_zabbix_version(self, msg):
+        """
+        Show version of Ludolph: Zabbix API plugin.
+
+        Usage: ludolph-zabbix-version
+        """
+        return 'Ludolph: Zabbix API plugin version: ' + VERSION
+
     def _get_alerts(self, groupids=None, hostids=None, monitored=True, maintenance=False, skip_dependent=True,
                     expand_description=False, select_hosts=('hostid',),
                     output=('triggerid', 'state', 'error', 'description', 'priority', 'lastchange'), **kwargs):
@@ -597,12 +607,3 @@ class Zabbix(LudolphPlugin):
         out.append('\n**%d** hostgroups are shown.\n%s/hostgroups.php' % (len(groups), self.zapi.server))
 
         return '\n'.join(out)
-
-    @command
-    def zapi_version(self, msg):
-        """
-        Show Ludolph: Zabbix API plugin version.
-
-        Usage: zapi_version
-        """
-        return 'ludolph-es version: '+ VERSION
