@@ -389,7 +389,6 @@ class Zapi(LudolphPlugin):
             except ValueError:
                 raise CommandError('Invalid %s date-time (required format: YYYY-mm-dd-HH-MM)' % name)
 
-        print('%r %r %r' % (start, end_or_duration, hosts_or_groups))
         if not (start and end_or_duration and hosts_or_groups):
             raise CommandError('Parameter required')
 
