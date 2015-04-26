@@ -14,7 +14,7 @@ Installation
 
     pip install ludolph-zabbix
 
-- Update Ludolph configuration file with plugin to load::
+- Add new plugin section into Ludolph configuration file::
 
     [ludolph_zabbix.zapi]
     # Zabbix server URI
@@ -30,12 +30,12 @@ Installation
 
 - Reload Ludolph::
 
-    ludolph reload
+    service ludolph reload
 
 
 **Dependencies:**
 
-- `Ludolph <https://github.com/erigones/Ludolph>`_ (0.5.1+)
+- `Ludolph <https://github.com/erigones/Ludolph>`_ (0.6.0+)
 - `zabbix-api-erigones <https://github.com/erigones/zabbix-api/>`_ (1.0+)
 
 

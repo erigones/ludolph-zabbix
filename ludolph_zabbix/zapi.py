@@ -7,11 +7,11 @@ See the LICENSE file for copying permission.
 import logging
 from datetime import datetime, timedelta
 
-from ludolph_zabbix.__init__ import __version__ as VERSION
+from ludolph_zabbix import __version__
 from ludolph.utils import parse_loglevel
 from ludolph.web import webhook, request, abort
 from ludolph.cron import cronjob
-from ludolph.command import CommandError, command, parameter_required, admin_required
+from ludolph.command import CommandError, command, parameter_required
 from ludolph.message import red, green
 from ludolph.plugins.plugin import LudolphPlugin
 from zabbix_api import ZabbixAPI, ZabbixAPIException, ZabbixAPIError
@@ -123,7 +123,7 @@ class Zapi(LudolphPlugin):
 
         Usage: ludolph-zabbix-version
         """
-        return 'Ludolph: Zabbix API plugin version: ' + VERSION
+        return 'Ludolph: Zabbix API plugin version: ' + __version__
 
     def _get_alerts(self, groupids=None, hostids=None, monitored=True, maintenance=False, skip_dependent=True,
                     expand_description=False, select_hosts=('hostid',),

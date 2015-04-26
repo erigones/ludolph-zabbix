@@ -6,7 +6,6 @@
 #
 # See the LICENSE file for copying permission.
 
-import sys
 import codecs
 try:
     from setuptools import setup
@@ -14,7 +13,7 @@ except ImportError:
     from distutils.core import setup
 
 # noinspection PyPep8Naming
-from ludolph_zabbix.__init__ import __version__ as VERSION
+from ludolph_zabbix import __version__ as VERSION
 
 DESCRIPTION = 'Ludolph: Zabbix API plugin'
 
@@ -27,7 +26,6 @@ CLASSIFIERS = [
     'Environment :: Console',
     'Environment :: Plugins',
     'Intended Audience :: Developers',
-    'Intended Audience :: Education',
     'Intended Audience :: System Administrators',
     'License :: OSI Approved :: MIT License',
     'Operating System :: MacOS',
