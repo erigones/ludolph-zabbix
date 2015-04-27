@@ -1,7 +1,7 @@
 ludolph-zabbix
 ##############
 
-Zabbix API plugin for `Ludolph <https://github.com/erigones/Ludolph>`_
+`Ludolph <https://github.com/erigones/Ludolph>`_: Zabbix API plugin
 
 .. image:: https://badge.fury.io/py/ludolph-zabbix.png
     :target: http://badge.fury.io/py/ludolph-zabbix
