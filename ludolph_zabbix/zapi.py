@@ -54,6 +54,7 @@ class Zapi(LudolphPlugin):
     https://www.zabbix.com/documentation/2.0/manual/appendix/api/api
     """
     zapi = None
+    __version__ = __version__
 
     # noinspection PyMissingConstructor,PyUnusedLocal
     def __init__(self, xmpp, config, **kwargs):
@@ -114,16 +115,6 @@ class Zapi(LudolphPlugin):
         Usage: zabbix-version
         """
         return 'Zabbix API version: ' + self.zapi.api_version()
-
-    # noinspection PyUnusedLocal
-    @command
-    def ludolph_zabbix_version(self, msg):
-        """
-        Show version of Ludolph: Zabbix API plugin.
-
-        Usage: ludolph-zabbix-version
-        """
-        return 'Ludolph: Zabbix API plugin version: ' + __version__
 
     def _get_alerts(self, groupids=None, hostids=None, monitored=True, maintenance=False, skip_dependent=True,
                     expand_description=False, select_hosts=('hostid',),
