@@ -20,7 +20,7 @@ DESCRIPTION = 'Ludolph: Zabbix API plugin'
 with codecs.open('README.rst', 'r', encoding='UTF-8') as readme:
     LONG_DESCRIPTION = ''.join(readme)
 
-DEPS = ['ludolph>=0.6.0', 'zabbix-api-erigones']
+DEPS = ['ludolph>=0.6.0', 'zabbix-api-erigones>=1.1']
 
 CLASSIFIERS = [
     'Environment :: Console',
