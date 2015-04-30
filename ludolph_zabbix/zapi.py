@@ -31,22 +31,16 @@ class Zapi(LudolphPlugin):
     __version__ = __version__
     _zapi = None
 
-    # noinspection PyMissingConstructor,PyUnusedLocal
-    def __init__(self, xmpp, config, **kwargs):
-        """
-        Login to zabbix.
-        """
-        self.xmpp = xmpp
-        self.init(dict(config))
+    def __post_init__(self):
+        """Login to zabbix"""
+        config = self.config
 
-    def init(self, config):
-        """
-        Initialize zapi and try to login.
-        """
+        # Initialize zapi and try to login
         # HTTP authentication?
         httpuser = config.get('httpuser', None)
         httppasswd = config.get('httppasswd', None)
 
+        # noinspection PyTypeChecker
         self._zapi = ZabbixAPI(server=config['server'], user=httpuser, passwd=httppasswd, timeout=TIMEOUT,
                                log_level=parse_loglevel(config.get('loglevel', 'INFO')))
 
@@ -62,7 +56,7 @@ class Zapi(LudolphPlugin):
         Acts as a decorator for executing zabbix API commands and checking zabbix API errors.
         """
         # Was never logged in. Repair authentication settings and restart Ludolph.
-        if not self._zapi.logged_in:
+        if not (self._zapi and self._zapi.logged_in):
             raise CommandError('Zabbix API not available')
 
         try:
