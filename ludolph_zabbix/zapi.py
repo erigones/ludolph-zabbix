@@ -11,7 +11,7 @@ from ludolph_zabbix import __version__
 from ludolph.utils import parse_loglevel
 from ludolph.web import webhook, request, abort
 from ludolph.cron import cronjob
-from ludolph.command import CommandError, command, parameter_required
+from ludolph.command import CommandError, command
 from ludolph.message import red, green
 from ludolph.plugins.plugin import LudolphPlugin
 from zabbix_api import ZabbixAPI, ZabbixAPIException, ZabbixAPIError
@@ -21,31 +21,6 @@ logger = logging.getLogger(__name__)
 TIMEOUT = 10
 
 
-def zabbix_command(fun):
-    """
-    Decorator for executing zabbix API commands and checking zabbix API errors.
-    """
-    def wrap(obj, msg, *args, **kwargs):
-        def api_error(errmsg='Zabbix API not available'):
-            # Log and reply with error message
-            logger.error(errmsg)
-            obj.xmpp.msg_reply(msg, 'ERROR: ' + errmsg)
-            return None
-
-        # Was never logged in. Repair authentication and restart Ludolph.
-        if not obj.zapi.logged_in:
-            return api_error()
-
-        try:
-            return fun(obj, msg, *args, **kwargs)
-        except ZabbixAPIError as ex:  # API command/application problem
-            return api_error('%(message)s %(code)s: %(data)s' % ex.error)
-        except ZabbixAPIException as ex:
-            return api_error('Zabbix API error (%s)' % ex)  # API connection/transport problem problem
-
-    return wrap
-
-
 class Zapi(LudolphPlugin):
     """
     Zabbix API connector for LudolphBot.
@@ -53,8 +28,8 @@ class Zapi(LudolphPlugin):
     Zabbix >= 2.0.6 is required.
     https://www.zabbix.com/documentation/2.0/manual/appendix/api/api
     """
-    zapi = None
     __version__ = __version__
+    _zapi = None
 
     # noinspection PyMissingConstructor,PyUnusedLocal
     def __init__(self, xmpp, config, **kwargs):
@@ -72,15 +47,30 @@ class Zapi(LudolphPlugin):
         httpuser = config.get('httpuser', None)
         httppasswd = config.get('httppasswd', None)
 
-        self.zapi = ZabbixAPI(server=config['server'], user=httpuser, passwd=httppasswd, timeout=TIMEOUT,
-                              log_level=parse_loglevel(config.get('loglevel', 'INFO')))
+        self._zapi = ZabbixAPI(server=config['server'], user=httpuser, passwd=httppasswd, timeout=TIMEOUT,
+                               log_level=parse_loglevel(config.get('loglevel', 'INFO')))
 
         # Login and save zabbix credentials
         try:
             logger.info('Zabbix API login')
-            self.zapi.login(config['username'], config['password'], save=True)
+            self._zapi.login(config['username'], config['password'], save=True)
         except ZabbixAPIException as e:
             logger.critical('Zabbix API login error (%s)', e)
+
+    def zapi(self, method, params=None):
+        """
+        Acts as a decorator for executing zabbix API commands and checking zabbix API errors.
+        """
+        # Was never logged in. Repair authentication settings and restart Ludolph.
+        if not self._zapi.logged_in:
+            raise CommandError('Zabbix API not available')
+
+        try:
+            return self._zapi.call(method, params=params)
+        except ZabbixAPIError as ex:  # API command/application problem
+            raise CommandError('%(message)s %(code)s: %(data)s' % ex.error)
+        except ZabbixAPIException as ex:
+            raise CommandError('Zabbix API error (%s)' % ex)  # API connection/transport problem problem
 
     @webhook('/alert', methods=('POST',))
     def alert(self):
@@ -106,7 +96,6 @@ class Zapi(LudolphPlugin):
         return 'Message sent'
 
     # noinspection PyUnusedLocal
-    @zabbix_command
     @command
     def zabbix_version(self, msg):
         """
@@ -114,7 +103,10 @@ class Zapi(LudolphPlugin):
 
         Usage: zabbix-version
         """
-        return 'Zabbix API version: ' + self.zapi.api_version()
+        try:
+            return 'Zabbix API version: ' + self._zapi.api_version()
+        except ZabbixAPIException as ex:
+            CommandError('Zabbix API error (%s)' % ex)  # API connection/transport problem problem
 
     def _get_alerts(self, groupids=None, hostids=None, monitored=True, maintenance=False, skip_dependent=True,
                     expand_description=False, select_hosts=('hostid',),
@@ -139,10 +131,9 @@ class Zapi(LudolphPlugin):
             params.update(**kwargs)
 
         # If trigger is lost (broken expression) we skip it
-        return (trigger for trigger in self.zapi.trigger.get(params) if trigger['hosts'])
+        return (trigger for trigger in self.zapi('trigger.get', params) if trigger['hosts'])
 
     # noinspection PyUnusedLocal
-    @zabbix_command
     @command
     def alerts(self, msg):
         """
@@ -160,7 +151,7 @@ class Zapi(LudolphPlugin):
 
         # Get notes = event acknowledges
         if notes:
-            events = self.zapi.event.get({
+            events = self.zapi('event.get', {
                 'eventids': [t['lastEvent']['eventid'] for t in triggers if t['lastEvent']],
                 'output': 'extend',
                 'select_acknowledges': 'extend',
@@ -199,12 +190,12 @@ class Zapi(LudolphPlugin):
                 desc += ' **??**'  # some kind of trigger error
 
             # Priority
-            prio = self.zapi.get_severity(trigger['priority']).ljust(12)
+            prio = self._zapi.get_severity(trigger['priority']).ljust(12)
 
             # Last change and age
-            dt = self.zapi.get_datetime(trigger['lastchange'])
-            # last = self.zapi.convert_datetime(dt)
-            age = '^^%s^^' % self.zapi.get_age(dt)
+            dt = self._zapi.get_datetime(trigger['lastchange'])
+            # last = self._zapi.convert_datetime(dt)
+            age = '^^%s^^' % self._zapi.get_age(dt)
 
             comments = ''
             if trigger['error']:
@@ -219,7 +210,7 @@ class Zapi(LudolphPlugin):
                     if e['eventid'] == event['eventid']:
                         for a in e['acknowledges']:
                             # noinspection PyAugmentAssignment
-                            acknowledges = '\n\t\t__%s: %s__' % (self.zapi.get_datetime(a['clock']),
+                            acknowledges = '\n\t\t__%s: %s__' % (self._zapi.get_datetime(a['clock']),
                                                                  a['message']) + acknowledges
                         del events[i]
                         break
@@ -228,12 +219,10 @@ class Zapi(LudolphPlugin):
                                                              ack, comments, acknowledges))
 
         out.append('\n**%d** issues are shown.\n%s/tr_status.php?groupid=0&hostid=0' % (len(triggers),
-                                                                                        self.zapi.server))
+                                                                                        self._zapi.server))
 
         return '\n'.join(out)
 
-    @zabbix_command
-    @parameter_required(1)
     @command
     def ack(self, msg, eventid, *eventids_or_note):
         """
@@ -272,7 +261,7 @@ class Zapi(LudolphPlugin):
 
         message = '%s: %s' % (self.xmpp.get_jid(msg), note)
 
-        res = self.zapi.event.acknowledge({
+        res = self.zapi('event.acknowledge', {
             'eventids': eventids,
             'message': message,
         })
@@ -291,7 +280,7 @@ class Zapi(LudolphPlugin):
         for host_str in host_strings:
             params['search'] = {'name': host_str}
 
-            for host in self.zapi.host.get(params):
+            for host in self.zapi('host.get', params):
                 res[host['hostid']] = host['name']
 
         return res
@@ -308,7 +297,7 @@ class Zapi(LudolphPlugin):
         for group_str in group_strings:
             params['search'] = {'name': group_str}
 
-            for host in self.zapi.hostgroup.get(params):
+            for host in self.zapi('hostgroup.get', params):
                 res[host['groupid']] = host['name']
 
         return res
@@ -325,7 +314,7 @@ class Zapi(LudolphPlugin):
         except ValueError:
             raise CommandError('Integer required')
 
-        self.zapi.maintenance.delete(mids)
+        self.zapi('maintenance.delete', mids)
 
         return 'Maintenance ID(s) **%s** deleted' % ','.join(map(str, mids))
 
@@ -366,7 +355,7 @@ class Zapi(LudolphPlugin):
         options['description'] = desc
 
         # Create maintenance period
-        res = self.zapi.maintenance.create(options)
+        res = self.zapi('maintenance.create', options)
 
         return 'Added maintenance ID **%s** for %s' % (res['maintenanceids'][0], desc)
 
@@ -406,7 +395,7 @@ class Zapi(LudolphPlugin):
         """
         out = []
         # Display list of maintenances
-        maintenances = self.zapi.maintenance.get({
+        maintenances = self.zapi('maintenance.get', {
             'output': 'extend',
             'sortfield': ['maintenanceid', 'name'],
             'sortorder': 'ASC',
@@ -418,17 +407,15 @@ class Zapi(LudolphPlugin):
             else:
                 desc = ''
 
-            since = self.zapi.timestamp_to_datetime(i['active_since'])
-            until = self.zapi.timestamp_to_datetime(i['active_till'])
+            since = self._zapi.timestamp_to_datetime(i['active_since'])
+            until = self._zapi.timestamp_to_datetime(i['active_till'])
             out.append('**%s**\t%s - %s\t__%s__%s\n' % (i['maintenanceid'], since, until, i['name'], desc))
 
         out.append('\n**%d** maintenances are shown.\n%s' % (len(maintenances),
-                                                             self.zapi.server + '/maintenance.php?groupid=0'))
+                                                             self._zapi.server + '/maintenance.php?groupid=0'))
 
         return '\n'.join(out)
 
-    @zabbix_command
-    @parameter_required(0)
     @command
     def outage(self, msg, *args):
         """
@@ -465,6 +452,8 @@ class Zapi(LudolphPlugin):
                 return self._outage_add(msg, start_date, end_date, *hosts_or_groups)
             elif action == 'del':
                 return self._outage_del(msg, *args[1:])
+            else:
+                raise CommandError('Invalid action')
 
         return self._outage_list(msg)
 
@@ -473,7 +462,7 @@ class Zapi(LudolphPlugin):
         """
         Cron job for cleaning outdated outages and informing about incoming outage end.
         """
-        maintenances = self.zapi.maintenance.get({
+        maintenances = self.zapi('maintenance.get', {
             'output': 'extend',
             'sortfield': ['maintenanceid', 'name'],
             'sortorder': 'ASC',
@@ -482,14 +471,14 @@ class Zapi(LudolphPlugin):
         in5 = now + timedelta(minutes=5)
 
         for i in maintenances:
-            until = self.zapi.get_datetime(i['active_till'])
+            until = self._zapi.get_datetime(i['active_till'])
             mid = i['maintenanceid']
             name = i['name']
             desc = i['description'] or ''
 
             if until < now:
                 logger.info('Deleting maintenance %s (%s)', mid, name)
-                self.zapi.maintenance.delete([mid])
+                self.zapi('maintenance.delete', [mid])
                 msg = 'Maintenance ID **%s** ^^(%s)^^ deleted' % (mid, desc)
             elif until < in5:
                 logger.info('Sending notification about maintenance %s (%s) end', mid, name)
@@ -507,7 +496,6 @@ class Zapi(LudolphPlugin):
                 self.xmpp.msg_broadcast(msg)
 
     # noinspection PyUnusedLocal
-    @zabbix_command
     @command
     def hosts(self, msg, hoststr=None):
         """
@@ -529,7 +517,7 @@ class Zapi(LudolphPlugin):
             params['search'] = {'name': hoststr}
 
         # Get hosts
-        hosts = self.zapi.host.get(params)
+        hosts = self.zapi('host.get', params)
 
         for host in hosts:
             if int(host['maintenance_status']):
@@ -560,12 +548,11 @@ class Zapi(LudolphPlugin):
 
             out.append('**%s**\t%s\t%s\t%s%s' % (host['hostid'], host['name'], status, available, inventory))
 
-        out.append('\n**%d** hosts are shown.\n%s/hosts.php?groupid=0' % (len(hosts), self.zapi.server))
+        out.append('\n**%d** hosts are shown.\n%s/hosts.php?groupid=0' % (len(hosts), self._zapi.server))
 
         return '\n'.join(out)
 
     # noinspection PyUnusedLocal
-    @zabbix_command
     @command
     def groups(self, msg, groupstr=None):
         """
@@ -587,13 +574,13 @@ class Zapi(LudolphPlugin):
             params['search'] = {'name': groupstr}
 
         # Get groups
-        groups = self.zapi.hostgroup.get(params)
+        groups = self.zapi('hostgroup.get', params)
 
         for group in groups:
             _hosts = ['**%s**: %s' % (h['hostid'], h['name']) for h in group['hosts'] if h]
             hosts = '\n\t\t^^%s ^^' % ', '.join(_hosts)
             out.append('**%s**\t%s%s' % (group['groupid'], group['name'], hosts))
 
-        out.append('\n**%d** hostgroups are shown.\n%s/hostgroups.php' % (len(groups), self.zapi.server))
+        out.append('\n**%d** hostgroups are shown.\n%s/hostgroups.php' % (len(groups), self._zapi.server))
 
         return '\n'.join(out)
