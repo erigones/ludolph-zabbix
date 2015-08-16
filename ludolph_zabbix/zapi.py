@@ -32,7 +32,7 @@ class Zapi(LudolphPlugin):
     _zapi = None
 
     def __post_init__(self):
-        """Login to zabbix"""
+        """Log in to zabbix"""
         config = self.config
 
         # Initialize zapi and try to login
@@ -129,19 +129,33 @@ class Zapi(LudolphPlugin):
 
     # noinspection PyUnusedLocal
     @command
-    def alerts(self, msg):
+    def alerts(self, msg, display='all'):
         """
-        Show a list of current zabbix alerts with notes attach to each event ID.
+        Show a list of current zabbix alerts with notes and/or trigger items attach to each event ID.
 
-        Usage: alerts
+        Usage: alerts [notes|items|all]
         """
-        notes = True
+        notes = items = False
+
+        if display.startswith('n'):
+            notes = True
+        elif display.startswith('i'):
+            items = True
+        elif display.startswith('a'):
+            items = notes = True
+
+        _zapi = self._zapi
         out = []
         # Get triggers
         t_output = ('triggerid', 'state', 'error', 'url', 'expression', 'description', 'priority', 'type', 'comments',
                     'lastchange')
         t_hosts = ('hostid', 'name', 'maintenance_status', 'maintenance_type',  'maintenanceid')
-        triggers = list(self._get_alerts(expand_description=True, output=t_output, select_hosts=t_hosts))
+        t_options = dict(expand_description=True, output=t_output, select_hosts=t_hosts)
+
+        if items:
+            t_options['selectItems'] = ('itemid', 'name')
+
+        triggers = list(self._get_alerts(**t_options))
 
         # Get notes = event acknowledges
         if notes:
@@ -184,12 +198,12 @@ class Zapi(LudolphPlugin):
                 desc += ' **??**'  # some kind of trigger error
 
             # Priority
-            prio = self._zapi.get_severity(trigger['priority']).ljust(12)
+            prio = _zapi.get_severity(trigger['priority']).ljust(12)
 
             # Last change and age
-            dt = self._zapi.get_datetime(trigger['lastchange'])
-            # last = self._zapi.convert_datetime(dt)
-            age = '^^%s^^' % self._zapi.get_age(dt)
+            dt = _zapi.get_datetime(trigger['lastchange'])
+            # last = _zapi.convert_datetime(dt)
+            age = '^^%s^^' % _zapi.get_age(dt)
 
             comments = ''
             if trigger['error']:
@@ -198,22 +212,28 @@ class Zapi(LudolphPlugin):
             if trigger['comments']:
                 comments += '\n\t\t^^%s^^' % trigger['comments'].strip()
 
+            latest_data = ''
             acknowledges = ''
+
+            if items:
+                # Link to latest data graph
+                history_link = '[[' + _zapi.server + '/history.php?action=showgraph&itemid=%(itemid)s|%(name)s]]'
+                latest_data = '\n\t\tLatest data: %s' % (', '.join(history_link % i for i in trigger['items']))
+
             if notes:
                 for i, e in enumerate(events):
                     if e['eventid'] == event['eventid']:
                         for a in e['acknowledges']:
-                            # noinspection PyAugmentAssignment
-                            acknowledges = '\n\t\t__%s: %s__' % (self._zapi.get_datetime(a['clock']),
-                                                                 a['message']) + acknowledges
+                            acknowledges = '\n\t\t __%s: %s__' % (_zapi.get_datetime(a['clock']),
+                                                                  a['message']) + acknowledges
                         del events[i]
                         break
 
-            out.append('**%s**\t%s\t%s\t%s\t%s\t%s%s%s\n' % (eventid, prio, hostname, desc, age,
-                                                             ack, comments, acknowledges))
+            print(latest_data, acknowledges)
+            out.append('**%s**\t%s\t%s\t%s\t%s\t%s%s%s\n' % (eventid, prio, hostname, desc, age, ack,
+                                                             comments, latest_data + acknowledges))
 
-        out.append('\n**%d** issues are shown.\n%s/tr_status.php?groupid=0&hostid=0' % (len(triggers),
-                                                                                        self._zapi.server))
+        out.append('\n**%d** issues are shown.\n%s/tr_status.php?groupid=0&hostid=0' % (len(triggers), _zapi.server))
 
         return '\n'.join(out)
 
@@ -529,6 +549,8 @@ class Zapi(LudolphPlugin):
             elif ae == 2:
                 available = red('Z')
 
+            latest_data = '[[%s/latest.php?hostid=%s|Latest data]]' % (self._zapi.server, host['hostid'])
+
             _inventory = []
             if host['inventory']:
                 for key, val in host['inventory'].items():
@@ -540,7 +562,8 @@ class Zapi(LudolphPlugin):
             else:
                 inventory = ''
 
-            out.append('**%s**\t%s\t%s\t%s%s' % (host['hostid'], host['name'], status, available, inventory))
+            out.append('**%s**\t%s\t%s\t%s\t%s%s' % (host['hostid'], host['name'], status,
+                                                     available, latest_data, inventory))
 
         out.append('\n**%d** hosts are shown.\n%s/hosts.php?groupid=0' % (len(hosts), self._zapi.server))
 
