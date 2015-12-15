@@ -12,7 +12,7 @@ from ludolph.utils import parse_loglevel
 from ludolph.web import webhook, request, abort
 from ludolph.cron import cronjob
 from ludolph.command import CommandError, command
-from ludolph.message import red, green
+from ludolph.message import IncomingLudolphMessage, red, green
 from ludolph.plugins.plugin import LudolphPlugin
 from zabbix_api import ZabbixAPI, ZabbixAPIException, ZabbixAPIError
 
@@ -80,7 +80,11 @@ class Zapi(LudolphPlugin):
         if jid == self.xmpp.room:
             mtype = 'groupchat'
         else:
-            mtype = 'normal'
+            mtype = request.forms.get('mtype', 'normal')
+
+            if mtype not in IncomingLudolphMessage.types:
+                logger.warning('Invalid message type (%s) in alert request', mtype)
+                abort(400, 'Invalid message type in alert request')
 
         msg = request.forms.get('msg', '')
         logger.info('Sending monitoring alert to "%s"', jid)
