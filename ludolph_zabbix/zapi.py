@@ -39,10 +39,12 @@ class Zapi(LudolphPlugin):
         # HTTP authentication?
         httpuser = config.get('httpuser', None)
         httppasswd = config.get('httppasswd', None)
+        # Whether to verify HTTPS server certificate (requires zabbix-api-erigones >= 1.2.2)
+        ssl_verify = bool(config.get('ssl_verify', True))
 
         # noinspection PyTypeChecker
         self._zapi = ZabbixAPI(server=config['server'], user=httpuser, passwd=httppasswd, timeout=TIMEOUT,
-                               log_level=parse_loglevel(config.get('loglevel', 'INFO')))
+                               log_level=parse_loglevel(config.get('loglevel', 'INFO')), ssl_verify=ssl_verify)
 
         # Login and save zabbix credentials
         try:

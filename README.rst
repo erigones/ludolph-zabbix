@@ -19,6 +19,7 @@ Installation
     [ludolph_zabbix.zapi]
     # Zabbix server URI
     server = https://zabbix.example.com/zabbix
+    # ssl_verify = true
 
     # Zabbix credentials
     username = ludolph
@@ -36,7 +37,7 @@ Installation
 **Dependencies:**
 
 - `Ludolph <https://github.com/erigones/Ludolph>`_ (0.6.0+)
-- `zabbix-api-erigones <https://github.com/erigones/zabbix-api/>`_ (1.1+)
+- `zabbix-api-erigones <https://github.com/erigones/zabbix-api/>`_ (1.2.2+)
 
 
 Links
