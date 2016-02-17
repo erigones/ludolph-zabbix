@@ -109,7 +109,7 @@ class Zapi(LudolphPlugin):
             CommandError('Zabbix API error (%s)' % ex)  # API connection/transport problem problem
 
     def _get_alerts(self, groupids=None, hostids=None, monitored=True, maintenance=False, skip_dependent=True,
-                    expand_description=False, select_hosts=('hostid',),
+                    expand_description=False, select_hosts=('hostid',), last=None,
                     output=('triggerid', 'state', 'error', 'description', 'priority', 'lastchange'), **kwargs):
         """Return iterator of current zabbix triggers"""
         params = {
@@ -119,13 +119,18 @@ class Zapi(LudolphPlugin):
             'maintenance': maintenance,
             'skipDependent': skip_dependent,
             'expandDescription': expand_description,
-            'filter': {'priority': None, 'value': 1},  # TRIGGER_VALUE_TRUE
+            'filter': {'priority': None},
             'selectHosts': select_hosts,
             'selectLastEvent':  'extend',  # API_OUTPUT_EXTEND
             'output': output,
             'sortfield': 'lastchange',
             'sortorder': 'DESC',  # ZBX_SORT_DOWN
         }
+
+        if last is None:  # Whether to show current or last N alerts
+            params['filter']['value'] = 1   # TRIGGER_VALUE_TRUE
+        else:
+            params['limit'] = last
 
         if kwargs:
             params.update(**kwargs)
@@ -135,11 +140,11 @@ class Zapi(LudolphPlugin):
 
     # noinspection PyUnusedLocal
     @command
-    def alerts(self, msg, display='all'):
+    def alerts(self, msg, display='all', last=None):
         """
         Show a list of current zabbix alerts with notes and/or trigger items attach to each event ID.
 
-        Usage: alerts [notes|items|all]
+        Usage: alerts [notes|items|all] [last]
         """
         notes = items = False
 
@@ -149,6 +154,9 @@ class Zapi(LudolphPlugin):
             items = True
         elif display.startswith('a'):
             items = notes = True
+        elif display.isdigit():
+            items = notes = True
+            last = display
 
         _zapi = self._zapi
         out = []
@@ -156,10 +164,16 @@ class Zapi(LudolphPlugin):
         t_output = ('triggerid', 'state', 'error', 'url', 'expression', 'description', 'priority', 'type', 'comments',
                     'lastchange')
         t_hosts = ('hostid', 'name', 'maintenance_status', 'maintenance_type',  'maintenanceid')
-        t_options = dict(expand_description=True, output=t_output, select_hosts=t_hosts)
+        t_options = {'expand_description': True, 'output': t_output, 'select_hosts': t_hosts}
 
         if items:
             t_options['selectItems'] = ('itemid', 'name')
+
+        if last is not None:
+            try:
+                t_options['last'] = int(last)
+            except ValueError:
+                pass
 
         triggers = list(self._get_alerts(**t_options))
 
@@ -182,6 +196,10 @@ class Zapi(LudolphPlugin):
             event = trigger['lastEvent']
             if event:
                 eventid = event['eventid']
+
+                if int(event['value']):
+                    eventid = '**%s**' % eventid
+
                 # Ack
                 if int(event['acknowledged']):
                     ack = '^^**ACK**^^'
@@ -208,6 +226,7 @@ class Zapi(LudolphPlugin):
 
             # Last change and age
             dt = _zapi.get_datetime(trigger['lastchange'])
+            last_change = '\n\t\tLast change: %s' % dt
             # last = _zapi.convert_datetime(dt)
             age = '^^%s^^' % _zapi.get_age(dt)
 
@@ -235,9 +254,8 @@ class Zapi(LudolphPlugin):
                         del events[i]
                         break
 
-            print(latest_data, acknowledges)
-            out.append('**%s**\t%s\t%s\t%s\t%s\t%s%s%s\n' % (eventid, prio, hostname, desc, age, ack,
-                                                             comments, latest_data + acknowledges))
+            out.append('%s\t%s\t%s\t%s\t%s\t%s%s%s%s\n' % (eventid, prio, hostname, desc, age, ack, last_change,
+                                                           comments, latest_data + acknowledges))
 
         out.append('\n**%d** issues are shown.\n%s/tr_status.php?groupid=0&hostid=0' % (len(triggers), _zapi.server))
 
