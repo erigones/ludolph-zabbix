@@ -142,7 +142,8 @@ class Zapi(LudolphPlugin):
     @command
     def alerts(self, msg, display='all', last=None):
         """
-        Show a list of current zabbix alerts with notes and/or trigger items attach to each event ID.
+        Show a list of current or/and previous (last) zabbix alerts with notes and/or trigger items
+        attached to each event ID.
 
         Usage: alerts [notes|items|all] [last]
         """
