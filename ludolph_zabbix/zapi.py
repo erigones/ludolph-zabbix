@@ -1,6 +1,6 @@
 """
 This file is part of Ludolph: Zabbix API plugin
-Copyright (C) 2015 Erigones, s. r. o.
+Copyright (C) 2015-2016 Erigones, s. r. o.
 
 See the LICENSE file for copying permission.
 """
@@ -40,7 +40,7 @@ class Zapi(LudolphPlugin):
         httpuser = config.get('httpuser', None)
         httppasswd = config.get('httppasswd', None)
         # Whether to verify HTTPS server certificate (requires zabbix-api-erigones >= 1.2.2)
-        ssl_verify = bool(config.get('ssl_verify', True))
+        ssl_verify = config.get('ssl_verify', True) not in (False, 'f', 'false', 'False', '0', 0)
 
         # noinspection PyTypeChecker
         self._zapi = ZabbixAPI(server=config['server'], user=httpuser, passwd=httppasswd, timeout=TIMEOUT,
