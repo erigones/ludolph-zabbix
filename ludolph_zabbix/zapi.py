@@ -255,8 +255,8 @@ attached to each event ID.
                         del events[i]
                         break
 
-            out.append('%s\t%s\t%s\t%s\t%s\t%s%s%s%s\n' % (eventid, prio, hostname, desc, age, ack, last_change,
-                                                           comments, latest_data + acknowledges))
+            out.append('%s\t%s\t%s\t%s\t%s\t%s%s%s%s\n' % (eventid, prio, hostname, desc, age, ack, comments,
+                                                           last_change, latest_data + acknowledges))
 
         out.append('\n**%d** issues are shown.\n%s/tr_status.php?groupid=0&hostid=0' % (len(triggers), _zapi.server))
 
