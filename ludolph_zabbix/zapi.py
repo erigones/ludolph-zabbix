@@ -18,7 +18,14 @@ from zabbix_api import ZabbixAPI, ZabbixAPIException, ZabbixAPIError
 
 logger = logging.getLogger(__name__)
 
-TIMEOUT = 10
+
+def get_last(array, pop_before=False):
+    try:
+        if pop_before:
+            array.pop()
+        return array[-1]
+    except IndexError:
+        return None
 
 
 class Zapi(LudolphPlugin):
@@ -30,6 +37,13 @@ class Zapi(LudolphPlugin):
     """
     __version__ = __version__
     _zapi = None
+    TIMEOUT = 10
+    DURATION_SUFFIXES = {
+        's': 'seconds',
+        'm': 'minutes',
+        'h': 'hours',
+        'd': 'days',
+    }
 
     def __post_init__(self):
         """Log in to zabbix"""
@@ -43,7 +57,7 @@ class Zapi(LudolphPlugin):
         ssl_verify = config.get('ssl_verify', True) not in (False, 'f', 'false', 'False', '0', 0)
 
         # noinspection PyTypeChecker
-        self._zapi = ZabbixAPI(server=config['server'], user=httpuser, passwd=httppasswd, timeout=TIMEOUT,
+        self._zapi = ZabbixAPI(server=config['server'], user=httpuser, passwd=httppasswd, timeout=self.TIMEOUT,
                                log_level=parse_loglevel(config.get('loglevel', 'INFO')), ssl_verify=ssl_verify)
 
         # Login and save zabbix credentials
@@ -52,6 +66,46 @@ class Zapi(LudolphPlugin):
             self._zapi.login(config['username'], config['password'], save=True)
         except ZabbixAPIException as e:
             logger.critical('Zabbix API login error (%s)', e)
+
+    @staticmethod
+    def _parse_datetime(value, param_name):
+        """Parse %Y-%m-%d-%H-%M string into datetime object"""
+        if value == 'now':
+            return datetime.now()
+        else:
+            try:
+                return datetime.strptime(value, '%Y-%m-%d-%H-%M')
+            except ValueError:
+                raise CommandError('Invalid parameter: **%s**. Date-time required! (format: YYYY-mm-dd-HH-MM)' %
+                                   param_name)
+
+    @classmethod
+    def _parse_datime_or_duration(cls, value, param_name, start_time=None, end_time=None):
+        """Parse duration string into timedelta object and return start or end datetime"""
+        assert start_time or end_time
+
+        try:
+            if value.endswith(('s', 'm', 'h', 'd')):
+                dtype = cls.DURATION_SUFFIXES[value[-1]]
+                duration = timedelta(**{dtype: int(value[:-1])})
+            else:
+                duration = timedelta(minutes=int(value))
+
+            if start_time:
+                return start_time + duration  # return end time
+            else:
+                return end_time - duration  # return start time
+        except ValueError:
+            try:
+                return cls._parse_datetime(value, param_name)
+            except CommandError:
+                if start_time:
+                    duration_symbol = '+'
+                else:
+                    duration_symbol = '-'
+
+                raise CommandError('Invalid parameter: **%s**. Duration or date-time required! (format: '
+                                   '%s<duration{s|m|h|d}> or <YYYY-mm-dd-HH-MM>)' % (param_name, duration_symbol))
 
     def zapi(self, method, params=None):
         """
@@ -67,6 +121,40 @@ class Zapi(LudolphPlugin):
             raise CommandError('%(message)s %(code)s: %(data)s' % ex.error)
         except ZabbixAPIException as ex:
             raise CommandError('Zabbix API error (%s)' % ex)  # API connection/transport problem problem
+
+    def _search_hosts(self, *host_strings):
+        """Search zabbix hosts by multiple host search strings. Return dict mapping of host IDs to host names"""
+        res = {}
+        params = {
+            'output': ['hostid', 'name'],
+            'searchWildcardsEnabled': True,
+            'searchByAny': True,
+        }
+
+        for host_str in host_strings:
+            params['search'] = {'name': host_str}
+
+            for host in self.zapi('host.get', params):
+                res[host['hostid']] = host['name']
+
+        return res
+
+    def _search_groups(self, *group_strings):
+        """Search zabbix host groups by multiple group search strings. Return dict mapping group IDs to group names"""
+        res = {}
+        params = {
+            'output': ['groupid', 'name'],
+            'searchWildcardsEnabled': True,
+            'searchByAny': True,
+        }
+
+        for group_str in group_strings:
+            params['search'] = {'name': group_str}
+
+            for host in self.zapi('hostgroup.get', params):
+                res[host['groupid']] = host['name']
+
+        return res
 
     @webhook('/alert', methods=('POST',))
     def alert(self):
@@ -109,7 +197,7 @@ class Zapi(LudolphPlugin):
             CommandError('Zabbix API error (%s)' % ex)  # API connection/transport problem problem
 
     def _get_alerts(self, groupids=None, hostids=None, monitored=True, maintenance=False, skip_dependent=True,
-                    expand_description=False, select_hosts=('hostid',), last=None,
+                    expand_description=False, select_hosts=('hostid',), active_only=True, priority=None,
                     output=('triggerid', 'state', 'error', 'description', 'priority', 'lastchange'), **kwargs):
         """Return iterator of current zabbix triggers"""
         params = {
@@ -119,7 +207,7 @@ class Zapi(LudolphPlugin):
             'maintenance': maintenance,
             'skipDependent': skip_dependent,
             'expandDescription': expand_description,
-            'filter': {'priority': None},
+            'filter': {'priority': priority},
             'selectHosts': select_hosts,
             'selectLastEvent':  'extend',  # API_OUTPUT_EXTEND
             'output': output,
@@ -127,59 +215,71 @@ class Zapi(LudolphPlugin):
             'sortorder': 'DESC',  # ZBX_SORT_DOWN
         }
 
-        if last is None:  # Whether to show current or last N alerts
+        if active_only:  # Whether to show current active alerts only
             params['filter']['value'] = 1   # TRIGGER_VALUE_TRUE
-        else:
-            params['limit'] = last
 
-        if kwargs:
-            params.update(**kwargs)
+        params.update(kwargs)
 
         # If trigger is lost (broken expression) we skip it
         return (trigger for trigger in self.zapi('trigger.get', params) if trigger['hosts'])
 
     # noinspection PyUnusedLocal
-    @command
-    def alerts(self, msg, display='all', last=None):
-        """
-        Show a list of current or/and previous (last) zabbix alerts with notes and/or trigger items \
-attached to each event ID.
-
-        Usage: alerts [notes|items|all] [last]
-        """
-        notes = items = False
-
-        if display.startswith('n'):
-            notes = True
-        elif display.startswith('i'):
-            items = True
-        elif display.startswith('a'):
-            items = notes = True
-        elif display.isdigit():
-            items = notes = True
-            last = display
-
+    def _show_alerts(self, msg, since=None, until=None, last=None, display_notes=True, display_items=True,
+                     hosts_or_groups=()):
+        """Show current or historical events (alerts)"""
         _zapi = self._zapi
         out = []
         # Get triggers
         t_output = ('triggerid', 'state', 'error', 'url', 'expression', 'description', 'priority', 'type', 'comments',
                     'lastchange')
-        t_hosts = ('hostid', 'name', 'maintenance_status', 'maintenance_type',  'maintenanceid')
+        t_hosts = ('hostid', 'name', 'maintenance_status', 'maintenance_type', 'maintenanceid')
         t_options = {'expand_description': True, 'output': t_output, 'select_hosts': t_hosts}
 
-        if items:
+        if hosts_or_groups or last or (since and until):
+            footer = []
+        else:
+            footer = ['%s/tr_status.php?groupid=0&hostid=0' % _zapi.server]
+
+        if display_items:
             t_options['selectItems'] = ('itemid', 'name')
+
+        if hosts_or_groups:
+            hosts = self._search_hosts(*hosts_or_groups)
+
+            if hosts:
+                t_options['hostids'] = list(hosts.keys())
+                footer.append('hosts: ' + ', '.join(hosts.values()))
+            else:
+                groups = self._search_groups(*hosts_or_groups)
+
+                if groups:
+                    t_options['groupids'] = list(groups.keys())
+                    footer.append('groups: ' + ', '.join(groups.values()))
+                else:
+                    raise CommandError('Invalid parameter: **host/group**. Existing host/group required!')
+
+        if since and until:
+            dt_until = self._parse_datetime(until, 'end')
+            dt_since = self._parse_datime_or_duration(since, 'start', end_time=dt_until)
+            t_options['lastChangeSince'] = dt_since.strftime('%s')
+            t_options['lastChangeTill'] = dt_until.strftime('%s')
+            t_options['active_only'] = False
+            footer.append('time period: %s - %s' % (_zapi.convert_datetime(dt_since), _zapi.convert_datetime(dt_until)))
 
         if last is not None:
             try:
-                t_options['last'] = int(last)
+                last = int(last)
             except ValueError:
-                pass
+                raise CommandError('Invalid parameter: **last**. Integer required!')
+            else:
+                t_options['limit'] = last
+                t_options['active_only'] = False
+                footer.append('last: %d' % last)
 
         triggers = list(self._get_alerts(**t_options))
 
         # Get notes = event acknowledges
-        if notes:
+        if display_notes:
             events = self.zapi('event.get', {
                 'eventids': [t['lastEvent']['eventid'] for t in triggers if t['lastEvent']],
                 'output': 'extend',
@@ -228,7 +328,6 @@ attached to each event ID.
             # Last change and age
             dt = _zapi.get_datetime(trigger['lastchange'])
             last_change = '\n\t\tLast change: %s' % dt
-            # last = _zapi.convert_datetime(dt)
             age = '^^%s^^' % _zapi.get_age(dt)
 
             comments = ''
@@ -241,12 +340,12 @@ attached to each event ID.
             latest_data = ''
             acknowledges = ''
 
-            if items:
+            if display_items:
                 # Link to latest data graph
                 history_link = '[[' + _zapi.server + '/history.php?action=showgraph&itemid=%(itemid)s|%(name)s]]'
                 latest_data = '\n\t\tLatest data: %s' % (', '.join(history_link % i for i in trigger['items']))
 
-            if notes:
+            if display_notes:
                 for i, e in enumerate(events):
                     if e['eventid'] == event['eventid']:
                         for a in e['acknowledges']:
@@ -258,9 +357,51 @@ attached to each event ID.
             out.append('%s\t%s\t%s\t%s\t%s\t%s%s%s%s\n' % (eventid, prio, hostname, desc, age, ack, comments,
                                                            last_change, latest_data + acknowledges))
 
-        out.append('\n**%d** issues are shown.\n%s/tr_status.php?groupid=0&hostid=0' % (len(triggers), _zapi.server))
+        # footer
+        out.append('\n**%d** issues are shown.' % len(triggers))
+        out.extend(footer)
 
         return '\n'.join(out)
+
+    @command
+    def alerts(self, msg, *args):
+        """
+        Show a list of current and/or previous zabbix alerts with notes and/or trigger items \
+attached to each event ID. Alerts can be optionally filtered by host or group name and/or time period.
+
+        Usage: alerts [host/group name] [last] [notes|items|none]
+        Usage: alerts [host/group name] [-duration{s|m|h|d}] [notes|items|none]
+        Usage: alerts [host/group name] <start date time Y-m-d-H-M> <end date time Y-m-d-H-M> [notes|items|none]
+        """
+        notes = items = True
+        start_time = end_time = last = None
+
+        if args:
+            args = list(args)
+            cur = str(get_last(args, False)).strip()
+
+            if cur == 'notes':
+                notes = True
+                cur = get_last(args, True)
+            elif cur == 'items':
+                items = True
+                cur = get_last(args, True)
+            elif cur == 'none':
+                items = notes = False
+                cur = get_last(args, True)
+
+            if cur:
+                if cur.isdigit():
+                    last = args.pop()
+                elif cur.startswith('-'):
+                    end_time = 'now'
+                    start_time = args.pop()[1:]
+                elif len(args) > 1 and all(i.isdigit() for i in cur.split('-')):
+                    end_time = args.pop()
+                    start_time = args.pop()
+
+        return self._show_alerts(msg, since=start_time, until=end_time, last=last, display_notes=notes,
+                                 display_items=items, hosts_or_groups=args)
 
     @command
     def ack(self, msg, eventid, *eventids_or_note):
@@ -287,7 +428,7 @@ attached to each event ID.
             try:
                 eventids = [int(eventid)]
             except ValueError:
-                raise CommandError('Integer required')
+                raise CommandError('Invalid parameter: **event ID**. Integer required!')
 
             for i, arg in enumerate(eventids_or_note):
                 try:
@@ -307,40 +448,6 @@ attached to each event ID.
 
         return 'Event ID(s) **%s** acknowledged' % ','.join(map(str, res.get('eventids', ())))
 
-    def _search_hosts(self, *host_strings):
-        """Search zabbix hosts by multiple host search strings. Return dict mapping of host IDs to host names"""
-        res = {}
-        params = {
-            'output': ['hostid', 'name'],
-            'searchWildcardsEnabled': True,
-            'searchByAny': True,
-        }
-
-        for host_str in host_strings:
-            params['search'] = {'name': host_str}
-
-            for host in self.zapi('host.get', params):
-                res[host['hostid']] = host['name']
-
-        return res
-
-    def _search_groups(self, *group_strings):
-        """Search zabbix host groups by multiple group search strings. Return dict mapping group IDs to group names"""
-        res = {}
-        params = {
-            'output': ['groupid', 'name'],
-            'searchWildcardsEnabled': True,
-            'searchByAny': True,
-        }
-
-        for group_str in group_strings:
-            params['search'] = {'name': group_str}
-
-            for host in self.zapi('hostgroup.get', params):
-                res[host['groupid']] = host['name']
-
-        return res
-
     # noinspection PyUnusedLocal
     def _outage_del(self, msg, *mids):
         """
@@ -351,7 +458,7 @@ attached to each event ID.
         try:
             mids = [int(i) for i in mids]
         except ValueError:
-            raise CommandError('Integer required')
+            raise CommandError('Invalid parameter: **maintenance ID**. Integer required!')
 
         self.zapi('maintenance.delete', mids)
 
@@ -378,17 +485,17 @@ attached to each event ID.
         hosts = self._search_hosts(*hosts_or_groups)
 
         if hosts:
-            options['hostids'] = hosts.keys()
+            options['hostids'] = list(hosts.keys())
             desc = 'hosts: ' + ', '.join(hosts.values())
         else:
             # Get groups
             groups = self._search_groups(*hosts_or_groups)
 
             if groups:
-                options['groupids'] = groups.keys()
+                options['groupids'] = list(groups.keys())
                 desc = 'groups: ' + ', '.join(groups.values())
             else:
-                raise CommandError('Host/Group not found')
+                raise CommandError('Invalid parameter: **host/group**. Existing host/group required!')
 
         options['name'] = ('Maintenance %s by %s' % (since, jid))[:128]
         options['description'] = desc
@@ -402,26 +509,11 @@ attached to each event ID.
         """
         Set maintenance period for specified host and time.
         """
-        def parse_datetime(x, name):
-            try:
-                return datetime.strptime(str(x), '%Y-%m-%d-%H-%M')
-            except ValueError:
-                raise CommandError('Invalid %s date-time (required format: YYYY-mm-dd-HH-MM)' % name)
-
         if not (start and end_or_duration and hosts_or_groups):
-            raise CommandError('Parameter required')
+            raise CommandError('Parameter(s) required!')
 
-        if start == 'now':
-            dt_start = datetime.now()
-        else:
-            dt_start = parse_datetime(start, 'start')
-
-        try:
-            duration = int(end_or_duration)
-        except ValueError:
-            dt_end = parse_datetime(end_or_duration, 'duration or end')
-        else:
-            dt_end = dt_start + timedelta(minutes=duration)
+        dt_start = self._parse_datetime(start, 'start')
+        dt_end = self._parse_datime_or_duration(end_or_duration, 'end', start_time=dt_start)
 
         return self._maintenance_add(self.xmpp.get_jid(msg), dt_start, dt_end, *hosts_or_groups)
 
@@ -464,9 +556,7 @@ attached to each event ID.
         Usage: outage
 
         Set maintenance period for specified host and time.
-        Usage: outage add <host1/group1 name> [host2/group2 name] ... +<duration in minutes>
-        Usage: outage add <host1/group1 name> [host2/group2 name] ... now <duration in minutes>
-        Usage: outage add <host1/group1 name> [host2/group2 name] ... <start date time Y-m-d-H-M> <duration in minutes>
+        Usage: outage add <host1/group1 name> [host2/group2 name] ... +<duration{s|m|h|d}>
         Usage: outage add <host1/group1 name> [host2/group2 name] ... <start date time Y-m-d-H-M> \
 <end date time Y-m-d-H-M>
 
@@ -492,7 +582,7 @@ attached to each event ID.
             elif action == 'del':
                 return self._outage_del(msg, *args[1:])
             else:
-                raise CommandError('Invalid action')
+                raise CommandError('Invalid action!')
 
         return self._outage_list(msg)
 
