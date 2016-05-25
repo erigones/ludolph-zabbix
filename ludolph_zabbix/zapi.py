@@ -28,6 +28,17 @@ def get_last(array, pop_before=False):
         return None
 
 
+def event_status(value):
+    value = int(value)
+
+    if value == 0:
+        return green('OK')
+    elif value == 1:
+        return red('PROBLEM')
+    else:
+        return 'UNKNOWN'
+
+
 class Zapi(LudolphPlugin):
     """
     Zabbix API connector for LudolphBot.
@@ -223,11 +234,48 @@ class Zapi(LudolphPlugin):
         # If trigger is lost (broken expression) we skip it
         return (trigger for trigger in self.zapi('trigger.get', params) if trigger['hosts'])
 
+    def _get_alert_events(self, triggers, since=None, until=None):
+        """Get all events related to triggers"""
+        triggerids = [t['triggerid'] for t in triggers]
+        events = {}
+        params = {
+            'triggerids': triggerids,
+            'object': 0,  # 0 - trigger
+            'source': 0,  # 0 - event created by a trigger
+            'output': 'extend',
+            'select_acknowledges': 'extend',
+            'sortfield': ['clock', 'eventid'],
+            'sortorder': 'DESC',
+            'nodeids': 0,
+        }
+
+        if since and until:
+            params['time_from'] = since
+            params['time_till'] = until
+        else:  # Max 15 days
+            since = datetime.now() - timedelta(days=15)
+            params['time_from'] = since.strftime('%s')
+
+        for e in self.zapi('event.get', params):
+            events.setdefault(e['objectid'], []).append(e)
+
+        # Because of time limits, there may be some missing events for some trigger IDs
+        missing_eventids = [t['lastEvent']['eventid'] for t in triggers if t['triggerid'] not in events]
+
+        if missing_eventids:
+            for e in self.zapi('event.get', {'eventids': missing_eventids, 'source': 0, 'output': 'extend',
+                                             'select_acknowledges': 'extend', 'nodeids': 0}):
+                events.setdefault(e['objectid'], []).append(e)
+
+        return events
+
     # noinspection PyUnusedLocal
     def _show_alerts(self, msg, since=None, until=None, last=None, display_notes=True, display_items=True,
                      hosts_or_groups=()):
         """Show current or historical events (alerts)"""
         _zapi = self._zapi
+        zapi_server = _zapi.server
+        get_datetime = _zapi.get_datetime
         out = []
         # Get triggers
         t_output = ('triggerid', 'state', 'error', 'url', 'expression', 'description', 'priority', 'type', 'comments',
@@ -238,7 +286,7 @@ class Zapi(LudolphPlugin):
         if hosts_or_groups or last or (since and until):
             footer = []
         else:
-            footer = ['%s/tr_status.php?groupid=0&hostid=0' % _zapi.server]
+            footer = ['%s/tr_status.php?groupid=0&hostid=0' % zapi_server]
 
         if display_items:
             t_options['selectItems'] = ('itemid', 'name')
@@ -248,23 +296,23 @@ class Zapi(LudolphPlugin):
 
             if hosts:
                 t_options['hostids'] = list(hosts.keys())
-                footer.append('hosts: ' + ', '.join(hosts.values()))
+                footer.append('Hosts: ' + ', '.join(hosts.values()))
             else:
                 groups = self._search_groups(*hosts_or_groups)
 
                 if groups:
                     t_options['groupids'] = list(groups.keys())
-                    footer.append('groups: ' + ', '.join(groups.values()))
+                    footer.append('Groups: ' + ', '.join(groups.values()))
                 else:
                     raise CommandError('Invalid parameter: **host/group**. Existing host/group required!')
 
         if since and until:
             dt_until = self._parse_datetime(until, 'end')
             dt_since = self._parse_datime_or_duration(since, 'start', end_time=dt_until)
-            t_options['lastChangeSince'] = dt_since.strftime('%s')
-            t_options['lastChangeTill'] = dt_until.strftime('%s')
+            t_options['lastChangeSince'] = since = dt_since.strftime('%s')
+            t_options['lastChangeTill'] = until = dt_until.strftime('%s')
             t_options['active_only'] = False
-            footer.append('time period: %s - %s' % (_zapi.convert_datetime(dt_since), _zapi.convert_datetime(dt_until)))
+            footer.append('Time period: %s - %s' % (_zapi.convert_datetime(dt_since), _zapi.convert_datetime(dt_until)))
 
         if last is not None:
             try:
@@ -274,19 +322,16 @@ class Zapi(LudolphPlugin):
             else:
                 t_options['limit'] = last
                 t_options['active_only'] = False
-                footer.append('last: %d' % last)
+                footer.append('Last: %d' % last)
 
+        # Fetch triggers
         triggers = list(self._get_alerts(**t_options))
 
-        # Get notes = event acknowledges
+        # Get notes (dict) = related events + acknowledges
         if display_notes:
-            events = self.zapi('event.get', {
-                'eventids': [t['lastEvent']['eventid'] for t in triggers if t['lastEvent']],
-                'output': 'extend',
-                'select_acknowledges': 'extend',
-                'sortfield': 'eventid',
-                'sortorder': 'DESC',
-            })
+            events = self._get_alert_events(triggers, since=since, until=until)
+        else:
+            events = {}
 
         for trigger in triggers:
             # If trigger is lost (broken expression) we skip it
@@ -294,15 +339,15 @@ class Zapi(LudolphPlugin):
                 continue
 
             # Event
-            event = trigger['lastEvent']
-            if event:
-                eventid = event['eventid']
+            last_event = trigger['lastEvent']
+            if last_event:
+                eventid = last_event['eventid']
 
-                if int(event['value']):
+                if int(last_event['value']):  # Problem or unknown state
                     eventid = '**%s**' % eventid
 
                 # Ack
-                if int(event['acknowledged']):
+                if int(last_event['acknowledged']):
                     ack = '^^**ACK**^^'
                 else:
                     ack = ''
@@ -326,8 +371,7 @@ class Zapi(LudolphPlugin):
             prio = _zapi.get_severity(trigger['priority']).ljust(12)
 
             # Last change and age
-            dt = _zapi.get_datetime(trigger['lastchange'])
-            last_change = '\n\t\tLast change: %s' % dt
+            dt = get_datetime(trigger['lastchange'])
             age = '^^%s^^' % _zapi.get_age(dt)
 
             comments = ''
@@ -335,27 +379,38 @@ class Zapi(LudolphPlugin):
                 comments += '\n\t\t^^**Error:** %s^^' % trigger['error']
 
             if trigger['comments']:
-                comments += '\n\t\t^^%s^^' % trigger['comments'].strip()
+                comments += '\n\t\t^^Note: %s^^' % trigger['comments'].strip()
 
-            latest_data = ''
-            acknowledges = ''
+            if trigger['url']:
+                comments += '\n\t\t^^URL: %s^^' % trigger['url'].strip()
 
             if display_items:
                 # Link to latest data graph
-                history_link = '[[' + _zapi.server + '/history.php?action=showgraph&itemid=%(itemid)s|%(name)s]]'
+                history_link = '[[' + zapi_server + '/history.php?action=showgraph&itemid=%(itemid)s|%(name)s]]'
                 latest_data = '\n\t\tLatest data: %s' % (', '.join(history_link % i for i in trigger['items']))
+            else:
+                latest_data = ''
 
-            if display_notes:
-                for i, e in enumerate(events):
-                    if e['eventid'] == event['eventid']:
-                        for a in e['acknowledges']:
-                            acknowledges = '\n\t\t __%s: %s__' % (_zapi.get_datetime(a['clock']),
-                                                                  a['message']) + acknowledges
-                        del events[i]
-                        break
+            trigger_events = []
+            for e in events.get(trigger['triggerid'], ()):
+                if int(e['acknowledged']):
+                    e_ack = '^^**ACK**^^'
+                else:
+                    e_ack = ''
 
-            out.append('%s\t%s\t%s\t%s\t%s\t%s%s%s%s\n' % (eventid, prio, hostname, desc, age, ack, comments,
-                                                           last_change, latest_data + acknowledges))
+                trigger_events.append('\n\t\tEvent: %s\t%s\t^^**%s**^^\t%s' % (e['eventid'], get_datetime(e['clock']),
+                                                                               event_status(e['value']), e_ack))
+
+                for a in e['acknowledges']:
+                    trigger_events.append('\n\t\t\t * __%s: %s__' % (_zapi.get_datetime(a['clock']), a['message']))
+
+            if trigger_events:
+                last_change = ''
+            else:
+                last_change = '\n\t\tLast change: %s' % dt
+
+            out.append('%s\t%s\t%s\t%s\t%s\t%s%s%s%s%s\n' % (eventid, prio, hostname, desc, age, ack, comments,
+                                                             latest_data, last_change, ''.join(trigger_events)))
 
         # footer
         out.append('\n**%d** issues are shown.' % len(triggers))
@@ -366,12 +421,12 @@ class Zapi(LudolphPlugin):
     @command
     def alerts(self, msg, *args):
         """
-        Show a list of current and/or previous zabbix alerts with notes and/or trigger items \
+        Show a list of current and/or previous zabbix alerts with events, notes and trigger items \
 attached to each event ID. Alerts can be optionally filtered by host or group name and/or time period.
 
-        Usage: alerts [host/group name] [last] [notes|items|none]
-        Usage: alerts [host/group name] [-duration{s|m|h|d}] [notes|items|none]
-        Usage: alerts [host/group name] <start date time Y-m-d-H-M> <end date time Y-m-d-H-M> [notes|items|none]
+        Usage: alerts [host/group name] [last] [all|none]
+        Usage: alerts [host/group name] [-duration{s|m|h|d}] [all|none]
+        Usage: alerts [host/group name] <start date time Y-m-d-H-M> <end date time Y-m-d-H-M> [all|none]
         """
         notes = items = True
         start_time = end_time = last = None
@@ -380,11 +435,7 @@ attached to each event ID. Alerts can be optionally filtered by host or group na
             args = list(args)
             cur = str(get_last(args, False)).strip()
 
-            if cur == 'notes':
-                notes = True
-                cur = get_last(args, True)
-            elif cur == 'items':
-                items = True
+            if cur == 'all':
                 cur = get_last(args, True)
             elif cur == 'none':
                 items = notes = False
