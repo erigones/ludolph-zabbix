@@ -5,4 +5,4 @@ Copyright (C) 2015-2016 Erigones, s. r. o.
 See the LICENSE file for copying permission.
 """
 
-__version__ = '1.4'
+__version__ = '1.5'

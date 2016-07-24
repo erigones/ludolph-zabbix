@@ -2,11 +2,12 @@
 # -*- coding: utf-8 -*-
 #
 # This file is part of Ludolph: Zabbix API plugin
-# Copyright (C) 2015 Erigones, s. r. o.
+# Copyright (C) 2015-2016 Erigones, s. r. o.
 #
 # See the LICENSE file for copying permission.
 
 import codecs
+
 try:
     from setuptools import setup
 except ImportError:
@@ -20,7 +21,7 @@ DESCRIPTION = 'Ludolph: Zabbix API plugin'
 with codecs.open('README.rst', 'r', encoding='UTF-8') as readme:
     LONG_DESCRIPTION = ''.join(readme)
 
-DEPS = ['ludolph>=0.6.0', 'zabbix-api-erigones>=1.2.2']
+DEPS = ['ludolph>=0.9.0', 'zabbix-api-erigones>=1.2.2']
 
 CLASSIFIERS = [
     'Environment :: Console',

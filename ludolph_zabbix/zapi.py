@@ -65,7 +65,7 @@ class Zapi(LudolphPlugin):
         httpuser = config.get('httpuser', None)
         httppasswd = config.get('httppasswd', None)
         # Whether to verify HTTPS server certificate (requires zabbix-api-erigones >= 1.2.2)
-        ssl_verify = config.get('ssl_verify', True) not in (False, 'f', 'false', 'False', '0', 0)
+        ssl_verify = self.get_boolean_value(config.get('ssl_verify', True))
 
         # noinspection PyTypeChecker
         self._zapi = ZabbixAPI(server=config['server'], user=httpuser, passwd=httppasswd, timeout=self.TIMEOUT,

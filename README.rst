@@ -36,7 +36,7 @@ Installation
 
 **Dependencies:**
 
-- `Ludolph <https://github.com/erigones/Ludolph>`_ (0.6.0+)
+- `Ludolph <https://github.com/erigones/Ludolph>`_ (0.9.0+)
 - `zabbix-api-erigones <https://github.com/erigones/zabbix-api/>`_ (1.2.2+)
 
 
