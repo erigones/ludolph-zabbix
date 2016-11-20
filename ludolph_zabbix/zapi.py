@@ -326,16 +326,18 @@ class Zapi(LudolphPlugin):
 
         # Fetch triggers
         triggers = list(self._get_alerts(**t_options))
+        triggers_hidden = 0
 
         # Get notes (dict) = related events + acknowledges
-        if display_notes:
-            events = self._get_alert_events(triggers, since=since, until=until)
-        else:
-            events = {}
+        events = self._get_alert_events(triggers, since=since, until=until)
 
         for trigger in triggers:
-            # If trigger is lost (broken expression) we skip it
-            if not trigger['hosts']:
+            related_events = events.get(trigger['triggerid'], ())
+
+            # Skip triggers without any PROBLEM events. These events usually exist for newly created hosts,
+            # but it will also skip triggers without PROBLEM events in historical view (Issue #6)
+            if all(int(e['value']) == 0 for e in related_events):
+                triggers_hidden += 1
                 continue
 
             # Event
@@ -392,17 +394,20 @@ class Zapi(LudolphPlugin):
                 latest_data = ''
 
             trigger_events = []
-            for e in events.get(trigger['triggerid'], ()):
-                if int(e['acknowledged']):
-                    e_ack = '^^**ACK**^^'
-                else:
-                    e_ack = ''
+            if display_notes:
+                for e in related_events:
+                    if int(e['acknowledged']):
+                        e_ack = '^^**ACK**^^'
+                    else:
+                        e_ack = ''
 
-                trigger_events.append('\n\t\tEvent: %s\t%s\t^^**%s**^^\t%s' % (e['eventid'], get_datetime(e['clock']),
-                                                                               event_status(e['value']), e_ack))
+                    trigger_events.append('\n\t\tEvent: %s\t%s\t^^**%s**^^\t%s' % (e['eventid'],
+                                                                                   get_datetime(e['clock']),
+                                                                                   event_status(e['value']),
+                                                                                   e_ack))
 
-                for a in e['acknowledges']:
-                    trigger_events.append('\n\t\t\t * __%s: %s__' % (_zapi.get_datetime(a['clock']), a['message']))
+                    for a in e['acknowledges']:
+                        trigger_events.append('\n\t\t\t * __%s: %s__' % (_zapi.get_datetime(a['clock']), a['message']))
 
             if trigger_events:
                 last_change = ''
@@ -413,7 +418,10 @@ class Zapi(LudolphPlugin):
                                                              latest_data, last_change, ''.join(trigger_events)))
 
         # footer
-        out.append('\n**%d** issues are shown.' % len(triggers))
+        stat = '\n**%d** issues are shown.' % (len(triggers) - triggers_hidden)
+        if triggers_hidden:
+            stat += '\n(%d issues are hidden)' % triggers_hidden
+        out.append(stat)
         out.extend(footer)
 
         return '\n'.join(out)
