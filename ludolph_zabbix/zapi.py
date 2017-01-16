@@ -220,14 +220,14 @@ class Zapi(LudolphPlugin):
             'expandDescription': expand_description,
             'filter': {'priority': priority},
             'selectHosts': select_hosts,
-            'selectLastEvent':  'extend',  # API_OUTPUT_EXTEND
+            'selectLastEvent': 'extend',  # API_OUTPUT_EXTEND
             'output': output,
             'sortfield': 'lastchange',
             'sortorder': 'DESC',  # ZBX_SORT_DOWN
         }
 
         if active_only:  # Whether to show current active alerts only
-            params['filter']['value'] = 1   # TRIGGER_VALUE_TRUE
+            params['filter']['value'] = 1  # TRIGGER_VALUE_TRUE
 
         params.update(kwargs)
 
@@ -260,7 +260,8 @@ class Zapi(LudolphPlugin):
             events.setdefault(e['objectid'], []).append(e)
 
         # Because of time limits, there may be some missing events for some trigger IDs
-        missing_eventids = [t['lastEvent']['eventid'] for t in triggers if t['triggerid'] not in events]
+        missing_eventids = [t['lastEvent']['eventid'] for t in triggers if
+                            t['lastEvent'] and t['triggerid'] not in events]
 
         if missing_eventids:
             for e in self.zapi('event.get', {'eventids': missing_eventids, 'source': 0, 'output': 'extend',
@@ -476,7 +477,8 @@ attached to each event ID. Alerts can be optionally filtered by host or group na
         note = 'ack'
 
         if eventid == 'all':
-            eventids = [t['lastEvent']['eventid'] for t in self._get_alerts(withLastEventUnacknowledged=True)]
+            eventids = [t['lastEvent']['eventid'] for t in self._get_alerts(withLastEventUnacknowledged=True) if
+                        t['lastEvent']]
 
             if not eventids:
                 raise CommandError('No unacknowledged events found')
