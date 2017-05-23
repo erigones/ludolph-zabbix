@@ -48,6 +48,7 @@ class Zapi(LudolphPlugin):
     """
     __version__ = __version__
     _zapi = None
+    _zapi_version = None
     TIMEOUT = 10
     DURATION_SUFFIXES = {
         's': 'seconds',
@@ -55,12 +56,27 @@ class Zapi(LudolphPlugin):
         'h': 'hours',
         'd': 'days',
     }
+    WEB_LINKS = {
+        'triggers': 'tr_status.php?groupid=0&hostid=0',
+        'history': 'history.php?action=showgraph&itemids[]={itemid}',
+        'history:2': 'history.php?action=showgraph&itemid={itemid}',
+        'maintenance': 'maintenance.php?groupid=0',
+        'latest_data': 'latest.php?hostids[]={hostid}&filter_set=Filter',
+        'latest_data:2': 'latest.php?hostid={hostid}',
+        'hosts': 'hosts.php?groupid=0',
+        'hostgroups': 'hostgroups.php',
+    }
+
+    def __init__(self, *args, **kwargs):
+        super(Zapi, self).__init__(*args, **kwargs)
+        self._web_links_cache = {}
 
     def __post_init__(self):
         """Log in to zabbix"""
         config = self.config
 
         # Initialize zapi and try to login
+        timeout = int(config.get('timeout', self.TIMEOUT))
         # HTTP authentication?
         httpuser = config.get('httpuser', None)
         httppasswd = config.get('httppasswd', None)
@@ -68,7 +84,7 @@ class Zapi(LudolphPlugin):
         ssl_verify = self.get_boolean_value(config.get('ssl_verify', True))
 
         # noinspection PyTypeChecker
-        self._zapi = ZabbixAPI(server=config['server'], user=httpuser, passwd=httppasswd, timeout=self.TIMEOUT,
+        self._zapi = ZabbixAPI(server=config['server'], user=httpuser, passwd=httppasswd, timeout=timeout,
                                log_level=parse_loglevel(config.get('loglevel', 'INFO')), ssl_verify=ssl_verify)
 
         # Login and save zabbix credentials
@@ -132,6 +148,46 @@ class Zapi(LudolphPlugin):
             raise CommandError('%(message)s %(code)s: %(data)s' % ex.error)
         except ZabbixAPIException as ex:
             raise CommandError('Zabbix API error (%s)' % ex)  # API connection/transport problem problem
+
+    def _get_zapi_version(self, flush_cache=False):
+        """Return Zabbix API version"""
+        if flush_cache or self._zapi_version is None:
+            self._zapi_version = str(self._zapi.api_version())
+            self._web_links_cache = {}
+
+        return self._zapi_version
+
+    def _get_web_link(self, item, **params):
+        """Return appropriate HTTP link to the Zabbix web interface"""
+        web_link = self._web_links_cache.get(item, None)
+
+        if not web_link:
+            try:
+                # noinspection PyNoneFunctionAssignment
+                zapi_version = self._get_zapi_version()
+            except ZabbixAPIException as ex:
+                logger.error('Zabbix API error while fetching Zabbix API version: %s', ex)
+                web_link = self.WEB_LINKS[item]
+            else:
+                if zapi_version:
+                    parts = zapi_version.split('.', 2)
+                    version_items = [item + ':' + '.'.join(parts[:i]) for i in range(len(parts), 0, -1)]
+                else:
+                    version_items = ()
+
+                for i in version_items:
+                    try:
+                        _web_link = self.WEB_LINKS[i]
+                    except KeyError:
+                        continue
+                    else:
+                        break
+                else:
+                    _web_link = self.WEB_LINKS[item]
+
+                web_link = self._web_links_cache[item] = self._zapi.server + '/' + _web_link
+
+        return web_link.format(**params)
 
     def _search_hosts(self, *host_strings):
         """Search zabbix hosts by multiple host search strings. Return dict mapping of host IDs to host names"""
@@ -203,7 +259,7 @@ class Zapi(LudolphPlugin):
         Usage: zabbix-version
         """
         try:
-            return 'Zabbix API version: ' + self._zapi.api_version()
+            return 'Zabbix API version: ' + self._get_zapi_version(flush_cache=True)
         except ZabbixAPIException as ex:
             CommandError('Zabbix API error (%s)' % ex)  # API connection/transport problem problem
 
@@ -287,7 +343,7 @@ class Zapi(LudolphPlugin):
         if hosts_or_groups or last or (since and until):
             footer = []
         else:
-            footer = ['%s/tr_status.php?groupid=0&hostid=0' % zapi_server]
+            footer = [self._get_web_link('triggers')]
 
         if display_items:
             t_options['selectItems'] = ('itemid', 'name')
@@ -389,8 +445,9 @@ class Zapi(LudolphPlugin):
 
             if display_items:
                 # Link to latest data graph
-                history_link = '[[' + zapi_server + '/history.php?action=showgraph&itemid=%(itemid)s|%(name)s]]'
-                latest_data = '\n\t\tLatest data: %s' % (', '.join(history_link % i for i in trigger['items']))
+                history_links = ['[[%s|%s]]' % (self._get_web_link('history', itemid=i['itemid']), i['name'])
+                                 for i in trigger['items']]
+                latest_data = '\n\t\tLatest data: %s' % ', '.join(history_links)
             else:
                 latest_data = ''
 
@@ -603,8 +660,7 @@ attached to each event ID. Alerts can be optionally filtered by host or group na
             until = self._zapi.timestamp_to_datetime(i['active_till'])
             out.append('**%s**\t%s - %s\t__%s__%s\n' % (i['maintenanceid'], since, until, i['name'], desc))
 
-        out.append('\n**%d** maintenances are shown.\n%s' % (len(maintenances),
-                                                             self._zapi.server + '/maintenance.php?groupid=0'))
+        out.append('\n**%d** maintenances are shown.\n%s' % (len(maintenances), self._get_web_link('maintenance')))
 
         return '\n'.join(out)
 
@@ -725,7 +781,7 @@ attached to each event ID. Alerts can be optionally filtered by host or group na
             elif ae == 2:
                 available = red('Z')
 
-            latest_data = '[[%s/latest.php?hostid=%s|Latest data]]' % (self._zapi.server, host['hostid'])
+            latest_data = '[[%s|Latest data]]' % self._get_web_link('latest_data', hostid=host['hostid'])
 
             _inventory = []
             if host['inventory']:
@@ -741,7 +797,7 @@ attached to each event ID. Alerts can be optionally filtered by host or group na
             out.append('**%s**\t%s\t%s\t%s\t%s%s' % (host['hostid'], host['name'], status,
                                                      available, latest_data, inventory))
 
-        out.append('\n**%d** hosts are shown.\n%s/hosts.php?groupid=0' % (len(hosts), self._zapi.server))
+        out.append('\n**%d** hosts are shown.\n%s' % (len(hosts), self._get_web_link('hosts')))
 
         return '\n'.join(out)
 
@@ -774,6 +830,6 @@ attached to each event ID. Alerts can be optionally filtered by host or group na
             hosts = '\n\t\t^^%s ^^' % ', '.join(_hosts)
             out.append('**%s**\t%s%s' % (group['groupid'], group['name'], hosts))
 
-        out.append('\n**%d** hostgroups are shown.\n%s/hostgroups.php' % (len(groups), self._zapi.server))
+        out.append('\n**%d** hostgroups are shown.\n%s' % (len(groups), self._get_web_link('hostgroups')))
 
         return '\n'.join(out)
