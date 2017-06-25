@@ -49,7 +49,7 @@ setup(
     description=DESCRIPTION,
     long_description=LONG_DESCRIPTION,
     author='Erigones',
-    author_email='erigones [at] erigones.com',
+    author_email='erigones@erigones.com',
     url='https://github.com/erigones/ludolph-zabbix/',
     license='MIT',
     packages=packages,
