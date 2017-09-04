@@ -32,7 +32,8 @@ Requires:       python2-ludolph
 Requires:       python2-zabbix-api-erigones
 %description -n python2-%{pypi_name}
 %{desc}
-Python 2 module with Ludolph: Zabbix API plugini. Use the python3-ludolph and python3-%{pypi_name} package to get the actual application and service.
+Python 2 module with Ludolph: Zabbix API plugini. Use the python3-ludolph and python3-%{pypi_name}\
+package to get the actual application and service.
 
 
 %package -n     python3-%{pypi_name}
@@ -62,14 +63,12 @@ rm -rf %{pypi_name}.egg-info
 %license LICENSE
 %doc README.rst
 %{python2_sitelib}/ludolph_zabbix
-# %{python2_sitelib}/%{pypi_name}
 %{python2_sitelib}/ludolph_zabbix-%{version}-py?.?.egg-info
 
 %files -n python3-%{pypi_name}
 %license LICENSE
 %doc README.rst
 %{python3_sitelib}/ludolph_zabbix
-# %{python3_sitelib}/%{pypi_name}
 %{python3_sitelib}/ludolph_zabbix-%{version}-py?.?.egg-info
 
 %changelog
